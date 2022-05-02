@@ -1,39 +1,43 @@
-\documentclass[modern]{aastex62}
-
-% lsstdoc documentation: https://lsst-texmf.lsst.io/lsstdoc.html
-\input{meta}
+\documentclass[]{spie}
 
 % Package imports go here.
+\renewcommand{\baselinestretch}{1.0} % Change to 1.65 for double spacing
+
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{graphicx}
+\usepackage[colorlinks=true, allcolors=blue]{hyperref}
 
 % Local commands go here.
+\newcommand{\apj}{ApJ}
 
-
-
-\newcommand{\docRef}{DMTN-229}
-\newcommand{\docUpstreamLocation}{\url{https://github.com/lsst-dm/dmtn-229}}
-
+\title{The Vera C. Rubin Observatory Data Butler and pipeline execution system}
+\input{authors}
 
 \begin{document}
-\input{authors}
-\date{\today}
-\title{The Vera C. Rubin Observatory Data Butler and pipeline execution system}
-\hypersetup{pdftitle={\@title}, pdfauthor={\@author}, pdfkeywords={\@keywords}}
+\maketitle
 
-\input{abstract}
+\begin{abstract}
+    The Rubin Observatory's Data Butler is designed to allow data file location and file formats to be of no concern to the people writing the science pipeline algorithms.
+    The Butler works in conjunction with the workflow graph builder to allow pipelines to be constructed from the algorithmic tasks.
+    These pipelines can be executed at scale using object stores and multi-node clusters, or on a laptop using a local file system.
+    The Butler and pipeline system are now in daily use during Rubin construction and early operations.
+\end{abstract}
 
-\input{body}
+\keywords{Data Management, Rubin Observatory, Legacy Survey of Space and Time, Databases}
 
-\appendix
-% Remove this when you strart your paper
-\input{appendix}
+\section{Introduction}
+
+The Legacy Survey of Space and Time \cite{2019ApJ...873..111I}
+
+\section{The Data Butler}
+
+\section{The Pipeline System}
+
+\section{Conclusions}
+
 % Include all the relevant bib files.
 % https://lsst-texmf.lsst.io/lsstdoc.html#bibliographies
-\section{References} \label{sec:bib}
-\bibliographystyle{yahapj}
+\bibliographystyle{spiebib}
 \bibliography{local,lsst,lsst-dm,refs_ads,refs,books}
-
-% Make sure lsst-texmf/bin/generateAcronyms.py is in your path
-\section{Acronyms} \label{sec:acronyms}
-\input{acronyms.tex}
 
 \end{document}
