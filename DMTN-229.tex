@@ -27,13 +27,84 @@
 
 \section{Introduction}
 
-The Legacy Survey of Space and Time \cite{2019ApJ...873..111I}
+The Vera C.\ Rubin Observatory's Legacy Survey of Space and Time \cite{2019ApJ...873..111I} will image the entire southern sky every three days and consist of tens of petabytes of raw image data and associated calibration data.
+All these files must be tracked, along with the intermediate datasets and output products from pipeline processing, and depending on where the processing occurs the files will be stored on either POSIX file systems or object stores.
+The LSST Data Management System (DMS)\cite{2017ASPC..512..279J} is responsible for transferring raw files off the mountain and storing them at the US Data Facility (USDF).
+The datasets are then processed by pipelines that can be run at different data centers and the results integrated into a unified data release.
+This paper will discuss the part of the DMS that abstracts data access from the pipeline algorithms, builds the execution workflow graphs, and allows the processing jobs to be run in large batch processing systems.
 
 \section{The Data Butler}
 
+The Data Butler (hereafter the ``Butler''), is the system that abstracts the data access details from the pipeline developers.
+The top requirements for the Butler are:
+
+\begin{itemize}
+\item The pipeline writer should not have to know where the data are being read from or written to or what file formats are being used, or even if a file is involved at all.
+\item The pipeline writer only has to deal with Python objects.
+\item Users should be able to locate the relevant data using common astronomical concepts such as observation identifier, physical filter, patch of sky, or telescope.
+\end{itemize}
+
+The two main components of the Butler are the Registry and the Datastore.
+Registry tracks datasets and relationships but has no idea where files are stored.
+Datastore is responsible for serializing a Python object to a storage system and reading data back from that storage system and recreating the Python object.
+There is then a thin layer (the responsibility of the \texttt{Butler} Python class itself) that provides an interface to the user that uses coordinates the Datastore and Registry interaction to ensure consistency.
+
+\subsection{The Registry}
+
+* Postgres or SQLite.
+* Dataset types.
+* Dimensions and data coordinates.
+* Collections
+    * RUN vs CHAINED vs TAGGED
+    * Calibration collections have validity ranges. Certification.
+
+\subsection{The Datastore}
+
+* Storage classes. Composites.
+* Formatters
+* Different datastore backends
+* ResourcePath
+* Thin interface between Registry and Datastore: the DatasetRef.
+
+\subsection{Client/Server Butler}
+
+* Butler is a python library.
+* On the IDF with thousands of users we want to use our own auth and not give everyone a Google account to control access to CloudSQL and object store.
+* Use a client/server implementation to allow permissions to be checked and return signed URLs.
+
+\subsection{Data Ingest}
+
+* Instrument registration.
+* Raw data.
+* Metadata translator.
+* Curated Calibrations.
+
 \section{The Pipeline System}
 
+* Task and pex\_config
+* Pipelines are defined in YAML. The YAML specifies the tasks that are to be part of the pipeline and any configuration overrides for those tasks.
+* \texttt{PipelineTask} defines its input and output connections through the \texttt{DatasetType}.
+* The graph builder connects up the PipelineTasks based on the connections to form a Quantum Graph.
+
+\section{Integration with Batch Systems}
+
+* Prototypes on AWS \cite{2020arXiv201106044B}
+
+* The Quantum Graph describes the scientific pipeline but that is not actionable by a workflow execution system.
+* BPS translates the quantum graph to a workflow graph that can then be converted by plug-ins to the targeted batch system (such as HTCondor, Parsl, Pegasus, or PanDA).
+* BPS can configure task clustering and resource requests (mainly memory requirements).
+
+* Registry used to build the graph but not during execution (to avoid many nodes querying the database at once)
+* For batch, ensure that the Quantum Graph also includes output datasets.
+* The execution system then solely needs to write the dataset and does not need to talk to registry.
+* When workflow is complete a "merge" job checks for existence of all the output datasets and then updates main registry with all the successfully written registry entries.
+
 \section{Conclusions}
+
+\acknowledgments
+
+This material or work is supported in part by the National Science Foundation through Cooperative Agreement AST-1258333, Cooperative Support Agreement AST-1202910, and Cooperative Support Agreement AST-1836783 managed by the Association of Universities for Research in Astronomy (AURA), and the Department of Energy under Contract No.\ DE-AC02-76SF00515 with the SLAC National Accelerator Laboratory managed by Stanford University.
+Additional Rubin Observatory funding comes from private donations, grants to universities, and in-kind support from LSSTC Institutional Members.
 
 % Include all the relevant bib files.
 % https://lsst-texmf.lsst.io/lsstdoc.html#bibliographies
