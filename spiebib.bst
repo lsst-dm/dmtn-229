@@ -7,11 +7,11 @@
 % and publisher/address fields reversed.
 %     July 3, 1995  (kmh)  Ken Hanson
 % In "inproceedings" allow 'journal' and avoid complaint
-% if 'booktitle' missing. 
+% if 'booktitle' missing.
 %     Dec. 10, 1997  (kmh)  Ken Hanson
 % In "inproceedings", 'series' produces the same output as previous 'journal'
 %     May 14, 2001 (hto)  Hwa-Tung Ong
-% Put 'volume' in bold after 'series' in "collection", "incollection", 
+% Put 'volume' in bold after 'series' in "collection", "incollection",
 %  and "inproceedings".
 %     Aug. 29, 2001  (kmh)  Ken Hanson
 %  insert ~ in volume bold line to avoid line break between journal and volume
@@ -53,6 +53,8 @@ ENTRY
     type
     volume
     year
+    handle
+    url
   }
   {}
   { label }
@@ -227,6 +229,14 @@ FUNCTION {bold}                   %% kmh - new function like emphasize
 
 INTEGERS { nameptr namesleft numnames }
 
+FUNCTION {format.url}
+{
+  url empty$
+    { "" }
+    { "\url{" url * "}" * output }
+  if$
+}
+
 FUNCTION {format.names}
 { 's :=
   #1 'nameptr :=
@@ -326,9 +336,9 @@ FUNCTION {format.date}
       if$
     }
     { month empty$
-  { write$ " (" year * ")" *  
+  { write$ " (" year * ")" *
     after.block 'output.state := }  %kmh date in parens
-	{ write$ " (" month * " " * year * ")" * 
+	{ write$ " (" month * " " * year * ")" *
 	  after.block 'output.state := }  %kmh date in parens
       if$
     }
@@ -462,7 +472,7 @@ FUNCTION {format.series.volume.number}   %% hto01 - similar to format.journal.vo
     { "" }                  %% hto01 - no warning of empty title
     { series emphasize }
   if$
-  volume empty$ 
+  volume empty$
     { "" *}                   %% kmh - no warning if no volume
     { " " * volume bold *}    %% kmh - make volume bold
 %%    { "vol.~" volume * }
@@ -647,14 +657,14 @@ FUNCTION {format.incoll.inproc.crossref}
 	      crossref * warning$
 	      ""
 	    }
-	    { " in {\em " booktitle * "\/}" * }   
+	    { " in {\em " booktitle * "\/}" * }
 %% kmh - add space before 'in'
 	  if$
 	}
 	{ " in " key * }   %% kmh - add space before 'in'
       if$
     }
-    { " in " format.crossref.editor * }   
+    { " in " format.crossref.editor * }
 %% kmh - add space before 'in'
   if$
   " \cite{" * crossref * "}" *
@@ -668,7 +678,7 @@ FUNCTION {article}
   crossref missing$
     { format.journal.volume.number output
       format.pages output
-      format.date 
+      format.date
     }
     { format.article.crossref output.nonnull
       format.pages output
@@ -704,7 +714,7 @@ FUNCTION {book}
     }
   if$
   format.edition output
-  format.date 
+  format.date
   new.block
   note output
   fin.entry
@@ -809,7 +819,7 @@ FUNCTION {inproceedings}
 %% moved below    format.paddress output
           format.pages output
 	 }
-         {format.journal.volume.number output  
+         {format.journal.volume.number output
 
 %% add jour., vol.,and number
           format.pages output
@@ -897,6 +907,21 @@ FUNCTION {misc}
   format.date
   new.block
   note output
+  fin.entry
+  empty.misc.check
+}
+
+FUNCTION {docushare}
+{ output.bibitem
+  format.authors output
+  format.title "title" output.check
+  howpublished output
+  note output
+  handle output
+  blank.sep
+  format.url
+  format.date
+  new.block
   fin.entry
   empty.misc.check
 }
