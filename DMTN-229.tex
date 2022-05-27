@@ -306,20 +306,20 @@ Generally, when these curated calibrations are stored the Butler converts them f
 
 \setcounter{footnote}{0}  % Latex only allows 9 footnotes with symbols.
 
-The fundamental unit of work for a pipeline is a \texttt{Task}.
+Processing data is done with reusable units of code called \texttt{Task}s. 
 Each \texttt{Task} has a specialized configuration object attached to it (from the \texttt{pex\_config} package\footnote{\url{https://github.com/lsst/pex_config}}) and must provide a \texttt{run()} method that is the method that implements the algorithm.
-A \texttt{run()} method alone is not enough to integrate a task into a pipeline.
-To enable that it must also satisfy the derived \texttt{PipelineTask} interface.
+\texttt{Task}s can be nested withing each other in a hierarchy to create high level algorithms.
+However, the top level \texttt{Task} of any algorithm must satisfy an additional interface, defined as a \texttt{PipelineTask}, which allows it to interact with the \texttt{Butler} for i/o and ordering within a processing pipeline.
 
 A \texttt{PipelineTask} is special because it requires the author to declare the task's ``connections'': the datasets the task will consume as inputs and produce as outputs.
-The connections also include \texttt{PipelineTask} must declare the dimensions over which the task runs.
+The interface also requires the definition of the task's dimensions, which defines the unit of processing over which the task runs.
 The task's dimensions do not need to match those of its input or output datasets; for example, a task with dimensions \texttt{\{instrument, exposure\}} that takes an input with dimensions \texttt{\{instrument, exposure, detector\}} is a ``gather'' step that processes all detectors from that exposure together, but processes each exposure independently (and hence possibly in parallel).
-For example a \texttt{PipelineTask} can declare it works with dimensions \texttt{detector} and \texttt{exposure}, whilst another can work on \texttt{band}, \texttt{tract}, and \texttt{patch} (sky regions).
+Other examples of \texttt{PipelineTask}  dimentions are \texttt{detector} and \texttt{exposure} which operates on data from an exposure of single detector taken from the telescope , whilst another could be \texttt{band}, \texttt{tract}, and \texttt{patch} (sky regions) which would operate on many intermediate data products produced from previous processing stages that overlap the specified region.
 The input and output datasets are tied in to the Butler by declaring the dataset type name and associated storage class.
 The storage class is a proxy for the Python type and thus allows the pipeline author to guarantee that the correct Python type will be given (converting it from another type if required and supported) -- if the storage classes associated with datasets of that dataset type in the target Butler are not compatible with those required by the pipeline the pipeline will not run.
 
-To support pipeline execution the \texttt{run()} method must now take parameters that match the connections and must return a \texttt{dict}-like data structure where the keys match the expected outputs.
-A \texttt{PipelineTask} then has enough information to be able to pull the required datasets from a Butler and store the outputs, although task authors can override that default behavior to allow for more complexity in the Butler interaction.
+To support pipeline execution the\texttt{run()} method of a \texttt{PipelineTask} must take parameters that match the input connections and must return a \texttt{dict}-like data structure where the keys match the expected outputs.
+A \texttt{PipelineTask} then has enough information to be able to pull the required datasets from a Butler and store the outputs, although task authors can override that default behavior using the associated config class to allow for more complexity in the Butler interaction.
 Connections have options to allow the dataset loading to be deferred (something that is important when co-adding hundreds of images) or to allow multiple datasets to be provided if the dimensionality implies that.
 
 \begin{figure}
@@ -343,27 +343,26 @@ Connections have options to allow the dataset loading to be deferred (something 
   \label{fig:pipeline}
 \end{figure}
 
-Once the \texttt{PipelineTask} code is written they must now be integrated into a pipeline.
+Each \texttt{PipelineTask} provides one data processing step, and may be integrated together into a a processing pipeline.
 We define pipelines using a YAML text file; an example is shown in Fig.~\ref{fig:pipeline}.
 The example pipeline consists of three tasks, with labels \texttt{calibrate}, \texttt{characterizeImage}, and \texttt{isr}, referencing the corresponding \texttt{PipelineTask} Python classes.
-The order listed in the YAML file is not important because the classes implementing each task know which dataset types they need and the pipeline builder arranges them in the required order.
-The dataset type names for a \texttt{PipelineTask} can be modified in the pipeline definition to allow extra steps to be inserted if desired.
-Each task can have specific configurations given, and the pipeline executor can also take external user overrides.
-When an instrument is explicitly specified, the \texttt{Instrument} class can be used to apply configuration overrides to all the tasks where it makes sense for that instrument.
-Pipeline definitions can be significantly more complex than in the example, allowing pipelines to be built up using the common recipe and ingredients paradigm\cite{2015A&C.....9...40J,2020ASPC..522..583L} to allow for pipeline reuse.
+The order listed in the YAML file is not important because the classes implementing each task know which dataset types they need and the pipeline builder arranges them such that the output connections of one task are associated with the corresponding input connections of one or more other tasks.
+Each task can have configurations specified in the pipeline file which override the default values, or overrides may be given through pipeline executor command line interface.
+When a pipeline specifies an instrument is explicitly, the \texttt{Instrument} class can be used to apply specific configuration overrides to any of the tasks in the pipeline.
+Pipeline definitions can be significantly more complex than in the example. To simplify this process, pipelines may be built up using the common recipe and ingredients paradigm\cite{2015A&C.....9...40J,2020ASPC..522..583L} to allow for pipeline reuse.
 It is also possible for a user to specify that a subset of a pipeline be executed rather than the entire thing.
 
 Fig.~\ref{fig:graph}a shows a visualization of the demonstration pipeline shown in Fig.~\ref{fig:pipeline}.
-It shows all the input and output datasets (including calibrations) and has determined the order of execution.
+It shows all the input and output datasets (including calibrations) and has determined the order of execution, and is referred to as a pipeline graph.
 What it does not show is any specific datasets attached to each step.
-To determine what is to be processed we need to query a Butler and allocate datasets to tasks.
-Once a \texttt{PipelineTask} has been assigned a specific set of data, we call that unit of work a ``quantum'', and the set of all quanta to be executed is called a ``Quantum Graph.''
+To determine what is to be processed a graph building algorithm queries a Butler and allocate datasets to tasks.
+All of the datasets which correspond to a unique set of task dimensions are bundled together into a unit of work that we call a ``quantum''.  The set of all quanta to be executed and the relations between them and their tasks are called a ``Quantum Graph.''
 The user provides an input Butler collection to search for datasets, in addition to a \texttt{Registry} query expression that affects not just the input datasets but the dimensions out of the tasks and output datasets as well.
-Having the \texttt{Registry}'s dimension table skeleton populated before the Quantum Graph is produced allows us to query the database for both input datasets and predicted future output datasets in much the same way.
+Having the \texttt{Registry}'s dimension table skeleton populated before the Quantum Graph is generated allows us to query the database for both input datasets and predict future output datasets in much the same way.
 The graph builder then allocates each matching input dataset to a specific Quantum and determines all the expected datasets that will be created during pipeline processing.
 During processing the outputs are written to a \texttt{RUN} collection along with log datasets containing all the log messages written by a task, software package versions, and processing metadata (including execution times and CPU usage for \texttt{Task}s).
-In normal usage we then create a new \texttt{CHAINED} collection that combines the input collections and the new output \texttt{RUN} collection to allow a single collection to be queried for all the inputs and outputs of that processing.
-In this way as processing campaigns proceed chains of collections can be formed representing the final data products.
+In normal usage we then create a new \texttt{CHAINED} collection that combines the input collections and the new output \texttt{RUN} collection to allow a single collection to be queried for all the input and output datasets in that processing.
+This procedure produces chains of collections, as processing campaigns proceed, which represent the final data products.
 The Quantum Graph itself provides provenance information and is tied to the datasets by preserving the predicted output dataset UUIDs in the Butler when they are stored during processing.
 
 \begin{figure}
