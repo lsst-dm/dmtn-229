@@ -348,6 +348,10 @@ We define pipelines using a YAML text file; an example is shown in Fig.~\ref{fig
 The example pipeline consists of three tasks, with labels \texttt{calibrate}, \texttt{characterizeImage}, and \texttt{isr}, referencing the corresponding \texttt{PipelineTask} Python classes.
 The order listed in the YAML file is not important because the classes implementing each task know which dataset types they need and the pipeline builder arranges them such that the output connections of one task are associated with the corresponding input connections of one or more other tasks.
 Each task can have configurations specified in the pipeline file which override the default values, or overrides may be given through pipeline executor command line interface.
+This configuration not only supports algorithmic values, but also allows configuring the names used for the datasets in a task's connections.
+The ability to configure dataset types provides flexibility to reuse the same \texttt{PipelineTask} with different configurations multiple times in a pipeline, with each configuration outputting a distinct dataset.
+Additionally, it also provides flexibility in re-using pipelines.
+Different pipelines can be derived from a common base pipeline, but tasks can be added or removed, and the datasets in the task connections can be configured such all the tasks can still be joined into a connected pipeline graph.
 When a pipeline specifies an instrument is explicitly, the \texttt{Instrument} class can be used to apply specific configuration overrides to any of the tasks in the pipeline.
 Pipeline definitions can be significantly more complex than in the example. To simplify this process, pipelines may be built up using the common recipe and ingredients paradigm\cite{2015A&C.....9...40J,2020ASPC..522..583L} to allow for pipeline reuse.
 It is also possible for a user to specify that a subset of a pipeline be executed rather than the entire thing.
