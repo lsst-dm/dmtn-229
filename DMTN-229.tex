@@ -89,13 +89,13 @@ For example, raw data can be addressed using dimensions \texttt{instrument}, \te
 A specific dataset must then be specified using a coordinate within that dimensional space, for example: \texttt{\{instrument="LSSTCam", detector=1, exposure=2024050100023\}} will uniquely represent the second detector of the 23rd LSSTCam observation taken on 2024-05-01.
 
 In order to determine which dimensions are relevant for a specific dataset, Butler has the concept of a ``dataset type''.
-A dataset type gives a name to the combination of the list of relevant dimensions, an abstraction around the Python type it corresponding, and whether or not it is a calibration dataset.
+A dataset type gives a name to the combination of the list of relevant dimensions, an abstraction around the Python type it corresponds to, and whether or not it is a calibration dataset.
 The name of the dataset type itself does not matter, but it is important that the names are used consistently because they are critical when constructing pipelines.
 Raw data are commonly given the dataset type \texttt{raw} and the LSST science pipelines use dataset type names such as \texttt{calexp} (calibrated exposure), \texttt{defects} (pixel defect masks), and \texttt{bias} (processed biases), with the intent being for the name to be descriptive enough for a science user to have a good idea as to what type of data it represents.
 
 The abstraction around the Python type is called a ``storage class''.
 The Butler's main job is to store Python objects somewhere and to retrieve them again.
-We use storage classes to map a name to a Python type and allow additional configuration to be associated with the Python type such as whether Butler can treat the type as a composite and what parameters can be included in the retrieval to modify the type.
+We use storage classes to map a name to a Python type and allow additional configuration to be associated with the Python type such as whether Butler can treat the type as a composite and what parameters can be included in the retrieval to modify the returned object.
 Composites can be important in that some pipelines may, for example, only need to take a WCS or a pixel mask as input and do not want the entire calibrated exposure to be loaded.
 A storage class can declare the components it allows and then declares the associated storage classes of each component.
 
@@ -103,14 +103,14 @@ The data model used by Butler is currently designed specifically for astronomica
 The model itself is specified in a YAML text file and is therefore easily extended or modified to suit specific needs.
 There is a tension between trying to develop one unified model that will support all astronomy data versus an approach where every observatory specifies their own dimension universe for every instrument.
 A unified model is needed in scenarios where datasets from different instruments should be processed in the same pipeline.
-There is, though, no problem with multiple distinct Butler repositories being configured with their own dimension universes when the data are very different and requiring the user to choose the relevant Butler repository.
-Currently there are two projects experimenting with the Butler using non-imaging survey data, and both Subaru's Prime Focus Spectrograph\cite{2020SPIE11447E..7VW} team and NASA's SPHEREx team\cite{2020SPIE11443E..0IC} have decided to alter the default dimension universe data model.
+There is, though, no problem with multiple distinct Butler repositories being configured with their own dimension universes when the data are very different and then requiring the user to choose the relevant Butler repository.
+Currently there are two projects experimenting with the Butler using non-imaging survey data, and both Subaru's Prime Focus Spectrograph team\cite{2020SPIE11447E..7VW} and NASA's SPHEREx team\cite{2020SPIE11443E..0IC} have decided to alter the default dimension universe data model.
 
 \subsection{Collections}
 
 A dataset can be specified by its data coordinate and dataset type, but the Butler needs one final piece of information to uniquely locate the desired dataset.
 In order to allow different pipeline execution runs to store their outputs without over-writing datasets from previous runs, each dataset must be associated with a \texttt{RUN} collection.
-Every dataset stored in a Butler Registry can be uniquely located by knowing the run collection, data coordinate and dataset type.
+Every dataset stored in a Butler Registry can be uniquely located by knowing the run collection, data coordinate, and dataset type.
 
 Whilst every dataset must be stored in a \texttt{RUN} collection there are also other types of collections that can be used:
 
@@ -128,8 +128,8 @@ All these collections are important when building and executing pipelines.
 Registry can be thought of as a database that can be queried to find out what datasets are available.
 We define Registry to have an abstract interface to allow different implementations to co-exist, although we do assume that a SQL-like syntax is supported when constraining queries (effectively a \texttt{WHERE} clause), even if that does not result in SQL being executed in the specific registry implementation.
 
-The primary Registry implementation uses SQLAlchemy \cite{myers2015essential}\footnote{\url{https://www.sqlalchemy.org}} to talk to PostgreSQL\footnote{\url{https://www.postgresql.org}} and SQLite\footnote{\url{https://www.sqlite.org/index.html}} backend databases.
-We do not make use of the Object Relational Mapping interface, and instead use the low-level SQLAlchemy "Core" interface to create and interact with tables.
+The primary Registry implementation uses SQLAlchemy \cite{myers2015essential}\footnote{\url{https://www.sqlalchemy.org}} to talk to PostgreSQL\footnote{\url{https://www.postgresql.org}} or SQLite\footnote{\url{https://www.sqlite.org/index.html}} backend databases.
+We do not make use of the Object Relational Mapping interface, and instead use the low-level SQLAlchemy ``Core'' interface to create and interact with tables.
 
 The Registry stores all the dimension information, collection and dataset type definitions, and the associations between these and the actual datasets.
 All dimension values must be pre-defined before a dataset can be stored with that value, and the dimension records have additional metadata that can be used to constrain dataset queries or to provide more detail as to what a dimension really represents.
@@ -140,7 +140,7 @@ In some case those dimension relationship are spatial (some dimensions are assoc
 
 These dimension relationships allow the \texttt{Registry} to provide a rich query system, based on a custom expression language based on SQL boolean expressions.
 These are parsed and translated by \texttt{Registry} into actual SQL queries, and we delegate optimization and execution of these queries almost entirely to the underlying database.
-But in contrast to raw SQL the user essentially has to only provide the \texttt{Registry} the equivalent of the \texttt{WHERE} clause, because the \texttt{SELECT} clause is based on what dataset types or dimensions are being requested, and the multi-join \texttt{FROM} clause can be worked internally according to the known dimension relationships, despite those relationships being encoded in YAML configuration rather than code.
+But in contrast to raw SQL the user essentially has to only provide the \texttt{Registry} the equivalent of the \texttt{WHERE} clause, because the \texttt{SELECT} clause is based on what dataset types or dimensions are being requested, and the multi-join \texttt{FROM} clause can be worked out internally according to the known dimension relationships, despite those relationships being encoded in YAML configuration rather than code.
 The query system also encapsulates the actual database schema from the user, allowing it to be changed for performance reasons without breaking user code.
 
 \subsection{The Datastore}
@@ -171,7 +171,7 @@ Whereas the registry only deals with datasets, the datastore understands composi
 When a dataset is associated with a composite storage class, the datastore can be configured to disassemble the dataset and write the contents as distinct files.
 For example, an astronomical image could be disassembled into the pixel image data, a variance plane, a mask, and a header before being written out as four files.
 If a user requests just the header component, that file can be read without needing to look at the other files, and if the full dataset is requested all components will be read and the composite will be reassembled using the helper class declared in the storage class definition.
-Of course, if a user requests a component when the dataset was not disassembled, this will still work, although it may require the entire file being downloaded from a remote object store in order to extract a small subset.
+Of course, if a user requests a component when the dataset was not disassembled, this will still work, although it may require the entire file be downloaded from a remote object store in order to extract a small subset.
 
 When the datasets are stored on a slow network disk or a remote object store, it is inefficient to continually re-read the files if the pipeline algorithm is reading subsets or if the user is requesting individual components.
 The file datastore overcomes this by implementing a caching system where the file is stored in a more local cache directory on first retrieval.
@@ -209,7 +209,7 @@ The latter situation is likely to be the situation in the Rubin Science Platform
 
 To solve this problem we are working on a \texttt{https} client/server Butler\cite{DMTN-176}.
 The client user will present their authentication token and the server will then determine if that user is authorized to retrieve the requested dataset.
-If they are allowed, they will be returned with a signed URL that their client can then retrieve.
+If they are allowed, they will be returned a signed URL that their client can then use to retrieve the dataset.
 
 \subsection{Command Line Tooling}
 
@@ -284,7 +284,7 @@ This allows, for example, specialist commands such as \texttt{ingest-photodiodes
 
 \subsection{Data Ingest}
 
-A Butler repository is not overly useful without any data in it.
+A Butler repository is not overly useful without containing any datasets.
 Facilities are provided for ingesting externally-generated files, and for the generic ingesting tooling\footnote{\texttt{butler ingest-files}.} care must be taken to define the correct data coordinates for each dataset and to ensure that those dimension values have already been defined.
 The \texttt{obs\_base} package\footnote{\url{https://github.com/lsst/obs_base}} provides a command specifically targeted at ingesting raw imaging data.
 The software scans a directory tree for files matching the provided glob, uses the \texttt{astro\_metadata\_translator}\footnote{\url{https://astro-metadata-translator.lsst.io}} infrastructure to read the headers and translate the contents to a standard form, creates \texttt{exposure} records as needed, and then ingests the files by constructing a data coordinate from the translated metadata.
@@ -308,13 +308,13 @@ Generally, when these curated calibrations are stored the Butler converts them f
 
 Processing data is done with reusable units of code called \texttt{Task}s.
 Each \texttt{Task} has a specialized configuration object attached to it (from the \texttt{pex\_config} package\footnote{\url{https://github.com/lsst/pex_config}}) and must provide a \texttt{run()} method that is the method that implements the algorithm.
-\texttt{Task}s can be nested withing each other in a hierarchy to create high level algorithms.
+\texttt{Task}s can be nested within each other in a hierarchy to create high level algorithms.
 However, the top level \texttt{Task} of any algorithm must satisfy an additional interface, defined as a \texttt{PipelineTask}, which allows it to interact with the \texttt{Butler} for i/o and ordering within a processing pipeline.
 
 A \texttt{PipelineTask} is special because it requires the author to declare the task's ``connections'': the datasets the task will consume as inputs and produce as outputs.
 The interface also requires the definition of the task's dimensions, which defines the unit of processing over which the task runs.
 The task's dimensions do not need to match those of its input or output datasets; for example, a task with dimensions \texttt{\{instrument, exposure\}} that takes an input with dimensions \texttt{\{instrument, exposure, detector\}} is a ``gather'' step that processes all detectors from that exposure together, but processes each exposure independently (and hence possibly in parallel).
-Other examples of \texttt{PipelineTask}  dimentions are \texttt{detector} and \texttt{exposure} which operates on data from an exposure of single detector taken from the telescope , whilst another could be \texttt{band}, \texttt{tract}, and \texttt{patch} (sky regions) which would operate on many intermediate data products produced from previous processing stages that overlap the specified region.
+Other examples of \texttt{PipelineTask} dimensions are \texttt{detector} and \texttt{exposure} which operates on data from an exposure of single detector taken from the telescope, whilst another could be \texttt{band}, \texttt{tract}, and \texttt{patch} (sky regions) which would operate on many intermediate data products produced from previous processing stages that overlap the specified region.
 The input and output datasets are tied in to the Butler by declaring the dataset type name and associated storage class.
 The storage class is a proxy for the Python type and thus allows the pipeline author to guarantee that the correct Python type will be given (converting it from another type if required and supported) -- if the storage classes associated with datasets of that dataset type in the target Butler are not compatible with those required by the pipeline the pipeline will not run.
 
@@ -352,15 +352,17 @@ This configuration not only supports algorithmic values, but also allows configu
 The ability to configure dataset types provides flexibility to reuse the same \texttt{PipelineTask} with different configurations multiple times in a pipeline, with each configuration outputting a distinct dataset.
 Additionally, it also provides flexibility in re-using pipelines.
 Different pipelines can be derived from a common base pipeline, but tasks can be added or removed, and the datasets in the task connections can be configured such all the tasks can still be joined into a connected pipeline graph.
-When a pipeline specifies an instrument is explicitly, the \texttt{Instrument} class can be used to apply specific configuration overrides to any of the tasks in the pipeline.
-Pipeline definitions can be significantly more complex than in the example. To simplify this process, pipelines may be built up using the common recipe and ingredients paradigm\cite{2015A&C.....9...40J,2020ASPC..522..583L} to allow for pipeline reuse.
+When a pipeline specifies an instrument explicitly, the \texttt{Instrument} class can be used to apply specific configuration overrides to any of the tasks in the pipeline.
+Pipeline definitions can be significantly more complex than in the example.
+To simplify this process, pipelines may be built up using the common recipe and ingredients paradigm\cite{2015A&C.....9...40J,2020ASPC..522..583L} to allow for pipeline reuse.
 It is also possible for a user to specify that a subset of a pipeline be executed rather than the entire thing.
 
 Fig.~\ref{fig:graph}a shows a visualization of the demonstration pipeline shown in Fig.~\ref{fig:pipeline}.
 It shows all the input and output datasets (including calibrations) and has determined the order of execution, and is referred to as a pipeline graph.
 What it does not show is any specific datasets attached to each step.
 To determine what is to be processed a graph building algorithm queries a Butler and allocate datasets to tasks.
-All of the datasets which correspond to a unique set of task dimensions are bundled together into a unit of work that we call a ``quantum''.  The set of all quanta to be executed and the relations between them and their tasks are called a ``Quantum Graph.''
+All of the datasets which correspond to a unique set of task dimensions are bundled together into a unit of work that we call a ``quantum''.
+The set of all quanta to be executed and the relations between them and their tasks are called a ``Quantum Graph.''
 The user provides an input Butler collection to search for datasets, in addition to a \texttt{Registry} query expression that affects not just the input datasets but the dimensions out of the tasks and output datasets as well.
 Having the \texttt{Registry}'s dimension table skeleton populated before the Quantum Graph is generated allows us to query the database for both input datasets and predict future output datasets in much the same way.
 The graph builder then allocates each matching input dataset to a specific Quantum and determines all the expected datasets that will be created during pipeline processing.
@@ -385,9 +387,9 @@ On a single compute node (including a laptop) the \texttt{ctrl\_mpexec} package 
 When a Quantum Graph consists of thousands of quanta, a single compute node is no longer sufficient.
 At that scale we need to use workflow systems such as HTCondor,\cite{10.1002/cpe.938} Pegasus,\cite{10.1016/j.future.2014.10.008} Parsl,\cite{10.1145/3307681.3325400} or PanDA.\cite{10.1088/1742-6596/331/7/072024}
 For these workflow systems the Quantum Graph must be translated into the form expected by the target system.
-Multiple prototypes were developed in parallel\cite{2020arXiv201106044B,DMTN-123,DMTN-137} but was soon realized that many of the concepts for translating a Quantum Graph to a specialist graph are common and we developed a new Batch Production System (\texttt{ctrl\_bps}\footnote{\url{https://github.com/ctrl_bps}}) that would provide a framework to allow the aforementioned batch environments to be treated as plugin code.
+Multiple prototypes were developed in parallel\cite{2020arXiv201106044B,DMTN-123,DMTN-137} but it was soon realized that many of the concepts for translating a Quantum Graph to a specialist graph are common and we developed a new Batch Production System (\texttt{ctrl\_bps}\footnote{\url{https://github.com/ctrl_bps}}) that would provide a framework to allow the aforementioned workflow systems to be treated as plugin code.
 
-The BPS system provides a facility for a Quantum Graph to be converted to a generic form support workflow system concepts, called the Workflow Graph, before being converted to the final form.
+The BPS system provides a facility for a Quantum Graph to be converted to a generic form supporting workflow system concepts, called the Workflow Graph, before being converted to the final form.
 This intermediate graph includes submission configuration parameters such as those that specify special resource requirements (CPU or memory) required by specific tasks.
 The BPS submission process also allows quanta to be clustered for efficiency.
 Some quanta can be quick, executing in tens of seconds, and not all batch systems are designed to efficiently handle such small payloads.
@@ -406,10 +408,10 @@ To enable this it was necessary to transfer datastore records for existing datas
 Running large workflows in this manner means that the main Registry is not involved at all during the bulk of the processing.
 Once the main workflow completes, a final job is executed that checks the datastore to see which of the expected files were produced, and then ensures that the associated registry entries are transferred back to the main Registry.
 This merge job runs even if the workflow fails, to ensure that all the datasets that were generated are known to the main registry.
-These changes significantly improve the scalability of the bulk processing.
+These changes significantly improved the scalability of the bulk processing.
 Note though that in this mode we are still writing to the main datastore file system or object store and not using any file management facilities of the workflow system.
 This decision is not hard-coded into BPS though and is entirely controlled by configuration.
-In the future, we may decide to have jobs read and write to a job-local file system datastore (thereby matching all the formatter and file naming configuration) and have the workflow system move files between the main datastore and the job's datastore
+In the future, we may decide to have jobs read and write to a job-local file system datastore (whilst matching all the formatter and file naming configuration) and have the workflow system move files between the main datastore and the job's datastore
 
 \section{Development Process}
 
