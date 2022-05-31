@@ -306,7 +306,7 @@ Generally, when these curated calibrations are stored the Butler converts them f
 
 \setcounter{footnote}{0}  % Latex only allows 9 footnotes with symbols.
 
-Processing data is done with reusable units of code called \texttt{Task}s. 
+Processing data is done with reusable units of code called \texttt{Task}s.
 Each \texttt{Task} has a specialized configuration object attached to it (from the \texttt{pex\_config} package\footnote{\url{https://github.com/lsst/pex_config}}) and must provide a \texttt{run()} method that is the method that implements the algorithm.
 \texttt{Task}s can be nested withing each other in a hierarchy to create high level algorithms.
 However, the top level \texttt{Task} of any algorithm must satisfy an additional interface, defined as a \texttt{PipelineTask}, which allows it to interact with the \texttt{Butler} for i/o and ordering within a processing pipeline.
@@ -383,31 +383,33 @@ To run a Quantum Graph it has to be converted to something that can be executed.
 On a single compute node (including a laptop) the \texttt{ctrl\_mpexec} package \footnote{\url{https://github.com/lsst/ctrl_mpexec}} provides a multi-processing executor, commonly run via the \texttt{pipetask} command line, that can run every quantum in the correct order and track all the responses.
 
 When a Quantum Graph consists of thousands of quanta, a single compute node is no longer sufficient.
-At that scale we need to use batch computing with tooling such as HTCondor,\cite{10.1002/cpe.938} Pegasus,\cite{10.1016/j.future.2014.10.008} Parsl,\cite{10.1145/3307681.3325400} or PanDA.\cite{10.1088/1742-6596/331/7/072024}
-For these batch systems the Quantum Graph must be translated into the form expected by the target system.
-A prototype demonstrated the approach on AWS with Pegasus using an S3 object store\cite{2020arXiv201106044B} but that used custom code.
-It was soon realized that many of the concepts for translating a Quantum Graph to a specialist graph are common and we developed a new Batch Production System (\texttt{ctrl\_bps}\footnote{\url{https://github.com/ctrl_bps}}) that would provide a framework to allow the aforementioned batch environments to be treated as plugin code.
+At that scale we need to use workflow systems such as HTCondor,\cite{10.1002/cpe.938} Pegasus,\cite{10.1016/j.future.2014.10.008} Parsl,\cite{10.1145/3307681.3325400} or PanDA.\cite{10.1088/1742-6596/331/7/072024}
+For these workflow systems the Quantum Graph must be translated into the form expected by the target system.
+Multiple prototypes were developed in parallel\cite{2020arXiv201106044B,DMTN-123,DMTN-137} but was soon realized that many of the concepts for translating a Quantum Graph to a specialist graph are common and we developed a new Batch Production System (\texttt{ctrl\_bps}\footnote{\url{https://github.com/ctrl_bps}}) that would provide a framework to allow the aforementioned batch environments to be treated as plugin code.
 
-The BPS system provides a facility for a Quantum Graph to be converted to a generic workflow graph before being converted to the final form.
-This intermediate graph can take configuration parameters that specify special resource requirements (CPU or memory) required by specific tasks.
-It also allows quanta to be clustered for efficiency.
+The BPS system provides a facility for a Quantum Graph to be converted to a generic form support workflow system concepts, called the Workflow Graph, before being converted to the final form.
+This intermediate graph includes submission configuration parameters such as those that specify special resource requirements (CPU or memory) required by specific tasks.
+The BPS submission process also allows quanta to be clustered for efficiency.
 Some quanta can be quick, executing in tens of seconds, and not all batch systems are designed to efficiently handle such small payloads.
 Clustering allows for multiple quanta to be combined into a single execution job; this can be particularly efficient if the clustering is designed such that the output of the first quantum is the only input to the next quantum (which is a common scenario for the early stages of many pipelines when a single detector is being characterized).
 
 In the initial experiments, each quantum would talk to the main Butler repository when retrieving data at the start of the quantum and then when writing the results out at the end.
-It soon became clear that this approach was not tenable once thousands of jobs run concurrently and they are all trying to ask registry where the specific dataset is located.
+It soon became clear that this approach was not tenable once thousands of jobs are running concurrently and they are all trying to ask the registry where their specific datasets are located.
 We fixed this problem by changing the way that batch jobs interact with a Butler.
-Initially we created a standalone read-only SQLite Butler registry containing the relevant information for the workflow; that did fix the problem but for very large workflows the SQLite file became larger than the quantum graph and would have to be copied to each node.
-A better solution was to use the Quantum Graph itself.
+Initially we created a standalone read-only SQLite Butler registry containing the relevant information for the entire workflow.
+That did fix the problem with the large numbers of simultaneous connections and updates.
+However, as a SQLite file it had to be copied to each job.
+For very large workflows the SQLite file became large enough that the copying caused its own problems on some systems and at minimum caused time delays.
+A better solution was to use the Quantum Graph itself since the graph can be stored in a shared location and only the subset of the graph needs to be read by each job.
 The Quantum Graph knows all the input datasets and all the expected output datasets; it is therefore possible for a Butler to be constructed that uses the Quantum Graph itself as the Registry whilst using the main Datastore.
 To enable this it was necessary to transfer datastore records for existing datasets into the Quantum Graph.
-This is necessary since the file locations and formatters are configuration options and therefore the current configuration may not match the configuration when a dataset was stored.
-The output datasets will use the current configuration and are therefore predictable at run time.
-Running large workflows in this manner means that Registry is not involved at all during the bulk of the processing.
+Running large workflows in this manner means that the main Registry is not involved at all during the bulk of the processing.
 Once the main workflow completes, a final job is executed that checks the datastore to see which of the expected files were produced, and then ensures that the associated registry entries are transferred back to the main Registry.
-This significantly improves the scalability of the bulk processing.
+This merge job runs even if the workflow fails, to ensure that all the datasets that were generated are known to the main registry.
+These changes significantly improve the scalability of the bulk processing.
 Note though that in this mode we are still writing to the main datastore file system or object store and not using any file management facilities of the workflow system.
-In future we may decide to change the configuration to have the jobs write to a local file system datastore (thereby matching all the formatter and file naming configuration) and have the workflow system move the files to the correct nodes.
+This decision is not hard-coded into BPS though and is entirely controlled by configuration.
+In the future, we may decide to have jobs read and write to a job-local file system datastore (thereby matching all the formatter and file naming configuration) and have the workflow system move files between the main datastore and the job's datastore
 
 \section{Development Process}
 
