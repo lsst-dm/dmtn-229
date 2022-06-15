@@ -10,6 +10,7 @@
 \usepackage{xcolor}
 
 % Local commands go here.
+\newcommand{\aj}{AJ}
 \newcommand{\apj}{ApJ}
 \newcommand{\apjs}{ApJS}
 \newcommand{\procspie}{Proc.\ SPIE}
@@ -39,14 +40,14 @@
     {\ -\ }{{\mdseries\ -\ }}3,
 }
 
-\title{The Vera C. Rubin Observatory Data Butler and pipeline execution system}
+\title{The Vera C. Rubin Observatory Data Butler and Pipeline Execution System}
 \input{authors}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-    The Rubin Observatory's Data Butler is designed to allow data file location and file formats to be of no concern to the people writing the science pipeline algorithms.
+    The Rubin Observatory's Data Butler is designed to allow data file location and file formats to be abstracted away from the people writing the science pipeline algorithms.
     The Butler works in conjunction with the workflow graph builder to allow pipelines to be constructed from the algorithmic tasks.
     These pipelines can be executed at scale using object stores and multi-node clusters, or on a laptop using a local file system.
     The Butler and pipeline system are now in daily use during Rubin construction and early operations.
@@ -77,7 +78,7 @@ The current implementation of the Butler is colloquially knowns as the ``Generat
 The ``Generation 2'' Butler was used for many years but certain limitations in the design and implementation, especially in terms of its relationship with the evolving demands of the pipeline design and need for more flexibility, led to it being completely replaced with a brand new system that shares no code with previous versions.
 
 The two main components of the Butler are the Registry and the Datastore.
-Registry organizes datasets conceptually and associates them with these astronomical concepts, but it has no idea where or how datasets are persisted.
+Registry organizes datasets conceptually and associates them with astronomical concepts as stated above, but it has no idea where or how datasets are persisted.
 Datastore is responsible for serializing a Python object to a storage system and reading data back from that storage system and recreating the Python object.
 There is then a thin layer of code (the responsibility of the \texttt{Butler} Python class itself) providing a unified interface to the user that coordinates the Datastore and Registry interaction to ensure consistency.
 
@@ -86,10 +87,11 @@ There is then a thin layer of code (the responsibility of the \texttt{Butler} Py
 A cornerstone of the Butler design is that any dataset can be found by specifying a coordinate in its dimensional space.
 These dimensions are generally quantities that can be understood by an astronomer as being relevant for the particular dataset.
 For example, raw data can be addressed using dimensions \texttt{instrument}, \texttt{detector}, and \texttt{exposure}.
-A specific dataset must then be specified using a coordinate within that dimensional space, for example: \texttt{\{instrument="LSSTCam", detector=1, exposure=2024050100023\}} will uniquely represent the second detector of the 23rd LSSTCam observation taken on 2024-05-01.
+A specific dataset must then be specified using a coordinate within that dimensional space, for example: \texttt{\{instrument="LSSTCam", detector=1, exposure=2024050100023\}} will uniquely represent the second detector of the 23rd LSSTCam observation taken on 2024-05-01.\footnote{Embedding the date in the integer exposure ID is an LSSTCam convention and is not required. Any integer can be used here so long as it uniquely identifies a specific observation.}
 
 In order to determine which dimensions are relevant for a specific dataset, Butler has the concept of a ``dataset type''.
 A dataset type gives a name to the combination of the list of relevant dimensions, an abstraction around the Python type it corresponds to, and whether or not it is a calibration dataset.
+A calibration dataset is a dataset that is associated with a data coordinate (for example an instrument and detector) but can be used for calibrating datasets, such as those used for instrument signature removal, that is additionally associated with a temporal validity range.
 The name of the dataset type itself does not matter, but it is important that the names are used consistently because they are critical when constructing pipelines.
 Raw data are commonly given the dataset type \texttt{raw} and the LSST science pipelines use dataset type names such as \texttt{calexp} (calibrated exposure), \texttt{defects} (pixel defect masks), and \texttt{bias} (processed biases), with the intent being for the name to be descriptive enough for a science user to have a good idea as to what type of data it represents.
 
@@ -104,7 +106,7 @@ The model itself is specified in a YAML text file and is therefore easily extend
 There is a tension between trying to develop one unified model that will support all astronomy data versus an approach where every observatory specifies their own dimension universe for every instrument.
 A unified model is needed in scenarios where datasets from different instruments should be processed in the same pipeline.
 There is, though, no problem with multiple distinct Butler repositories being configured with their own dimension universes when the data are very different and then requiring the user to choose the relevant Butler repository.
-Currently there are two projects experimenting with the Butler using non-imaging survey data, and both Subaru's Prime Focus Spectrograph team\cite{2020SPIE11447E..7VW} and NASA's SPHEREx team\cite{2020SPIE11443E..0IC} have decided to alter the default dimension universe data model.
+Currently there are two projects experimenting with the Butler using non-imaging survey data, and both Subaru's Prime Focus Spectrograph (PFS) team\cite{2020SPIE11447E..7VW} and NASA's SPHEREx team\cite{2020SPIE11443E..0IC} have decided to alter the default dimension universe data model.
 
 \subsection{Collections}
 
@@ -118,6 +120,7 @@ Whilst every dataset must be stored in a \texttt{RUN} collection there are also 
 \item A \texttt{TAGGED} collection is a collection of arbitrary datasets.
 \item A \texttt{CHAINED} collection is a collection of other collections and those other collections can be of any type (chains of chains are allowed).
       A \texttt{CHAINED} collection does not itself contain datasets.
+      The order of collections in a chain is important and determines how datasets are found.
 \item A \texttt{CALIBRATION} collection is a special type of collection where a calibration dataset (one whose dataset type is marked as a calibration) can be associated with a validity timespan.
 \end{itemize}
 
@@ -133,20 +136,20 @@ We do not make use of the Object Relational Mapping interface, and instead use t
 
 The Registry stores all the dimension information, collection and dataset type definitions, and the associations between these and the actual datasets.
 All dimension values must be pre-defined before a dataset can be stored with that value, and the dimension records have additional metadata that can be used to constrain dataset queries or to provide more detail as to what a dimension really represents.
-For example, in the default schema the \texttt{exposure} dimension contains metadata including the time of the exposure, the elevation and azimuth, the observation type, and the exposure time, whereas the \texttt{detector} dimension contains metadata including the full name, the raft name, and the detector type.
+For example, in the default schema, which is currently used by LSST cameras, Hyper Suprime-Cam\cite{2018PASJ...70S...1M} and DECam\cite{2015AJ....150..150F}, the \texttt{exposure} dimension contains metadata including the time of the exposure, the elevation and azimuth, the observation type, and the exposure time, whereas the \texttt{detector} dimension contains metadata including the full name, the raft name, and the detector type.
 The tables that hold this dimension metadata exist independently of the datasets they correspond to; for example, while the metadata associated with the \texttt{exposure} dimension metadata is usually derived from the header of a \texttt{raw} dataset, that \texttt{exposure} is also associated the dataset types that represent processing done on that exposure.
 The dimension tables -- which often also include foreign key relationships, such as the \texttt{physical\_filter} associated with an \texttt{exposure} -- thus form a data model ``skeleton'' of sorts for the actual datasets, which have no relationships of their own.
-In some case those dimension relationship are spatial (some dimensions are associated with regions on the sky) or temporal (associated with time spans).
+In some cases those dimension relationship are spatial (some dimensions are associated with regions on the sky) or temporal (associated with time spans).
 
 These dimension relationships allow the \texttt{Registry} to provide a rich query system, based on a custom expression language based on SQL boolean expressions.
 These are parsed and translated by \texttt{Registry} into actual SQL queries, and we delegate optimization and execution of these queries almost entirely to the underlying database.
 But in contrast to raw SQL the user essentially has to only provide the \texttt{Registry} the equivalent of the \texttt{WHERE} clause, because the \texttt{SELECT} clause is based on what dataset types or dimensions are being requested, and the multi-join \texttt{FROM} clause can be worked out internally according to the known dimension relationships, despite those relationships being encoded in YAML configuration rather than code.
-The query system also encapsulates the actual database schema from the user, allowing it to be changed for performance reasons without breaking user code.
+The query system also isolates the actual database schema from the user, allowing it to be changed for performance reasons without breaking user code.
 
 \subsection{The Datastore}
 
 Datastores are responsible for serializing a Python object to a storage system and reading the data back from the storage system and returning a Python object.
-On \texttt{put} datastore is given a reference to the dataset (encapsulated in the Python class \texttt{DatasetRef}) by Registry (this is the data coordinate, the dataset type, the run collection, and the unique identifier, a UUID, assigned by Registry) and the Python object.
+On \texttt{put}, datastore is given a reference to the dataset (encapsulated in the Python class \texttt{DatasetRef}) by Registry (this is the data coordinate, the dataset type, the run collection, and the unique identifier, a UUID,\cite{rfc4122uuid} assigned by Registry) and the Python object.
 To retrieve a dataset the datastore is passed in the dataset reference.
 By design the only connection between Registry and Datastore is the dataset reference, although in some implementations the datastore can make use of the shared PostgreSQL database to store relevant information.
 
@@ -159,7 +162,7 @@ All datastores support configuration-based constraints that can be used to decid
 The \texttt{FileDatastore} is the most fundamental of the datastore implementations in that it is responsible for serializing datasets to files and reading them back in again.
 A file datastore is defined by a URI pointing to the area where files are under the control of the datastore.
 A URI is used rather than a file path to allow file I/O itself to be abstracted to allow use of remote storage or POSIX file systems.
-To achieve this abstraction we use a unified URI handler class, \texttt{ResourcePath} from the \texttt{lsst-resources} package\footnote{\url{https://github.com/lsst/resources}}, which currently supports S3 storage, Google Cloud Storage, WebDAV, and POSIX, and new storage systems can easily be added.
+To achieve this abstraction we use a unified URI handler class, \texttt{ResourcePath} from the \texttt{lsst-resources} package\footnote{\url{https://github.com/lsst/resources}}, which currently supports S3 storage, Google Cloud Storage, WebDAV, and POSIX, as well as new storage systems which can easily be added.
 
 Within the file datastore the class that is responsible for creating the file and reading the file is called the \texttt{Formatter}.
 The datastore configuration system includes a look up table that matches the dataset type or storage class of the relevant dataset to a corresponding formatter implementation.
@@ -296,8 +299,9 @@ In situations where the files may be ingested into Butler repositories multiple 
 As noted above, a \texttt{CALIBRATION} collection is a special type of collection that associates datasets with a validity range.
 When a calibration is requested the data coordinate of the dataset being calibrated is used and any time-based dimensions (such as \texttt{exposure}) specify which calibration should be chosen.
 
-Not all calibrations are calculated from datasets available to a Butler, for example, for LSSTCam the QE curves are calculated by the camera team and given to the pipelines team as part of the camera delivery.
-Additionally, some calibrations, such as defect masks, are relatively static, can be represented in a compact text format, and are useful to people outside of a Butler.
+Not all calibrations are calculated from datasets available to a Butler.
+For example, for LSSTCam the QE curves are calculated by the camera team and given to the pipelines team as part of the camera delivery.
+Additionally, some calibrations, such as defect masks, are relatively static, and these can be represented in a compact text format, and are useful to people outside of a Butler.
 We call such datasets ``curated calibrations'' and store them in Git repositories using text file formats and a directory layout that makes the validity ranges clear.
 It can be very convenient when setting up a new Butler for an instrument to be able to seed it with these curated calibrations without having to locate raw data files and reconstruct them from scratch, and infrastructure is provided to enable that, for example using the \texttt{butler write-curated-calibrations} command line tool.
 Generally, when these curated calibrations are stored the Butler converts them from text format to a binary format to make reading them more efficient; this is all handled by the formatter configured for the particular datastore.
@@ -318,7 +322,7 @@ Other examples of \texttt{PipelineTask} dimensions are \texttt{detector} and \te
 The input and output datasets are tied in to the Butler by declaring the dataset type name and associated storage class.
 The storage class is a proxy for the Python type and thus allows the pipeline author to guarantee that the correct Python type will be given (converting it from another type if required and supported) -- if the storage classes associated with datasets of that dataset type in the target Butler are not compatible with those required by the pipeline the pipeline will not run.
 
-To support pipeline execution the\texttt{run()} method of a \texttt{PipelineTask} must take parameters that match the input connections and must return a \texttt{dict}-like data structure where the keys match the expected outputs.
+To support pipeline execution the \texttt{run()} method of a \texttt{PipelineTask} must take parameters that match the input connections and must return a \texttt{dict}-like data structure where the keys match the expected outputs.
 A \texttt{PipelineTask} then has enough information to be able to pull the required datasets from a Butler and store the outputs, although task authors can override that default behavior using the associated config class to allow for more complexity in the Butler interaction.
 Connections have options to allow the dataset loading to be deferred (something that is important when co-adding hundreds of images) or to allow multiple datasets to be provided if the dimensionality implies that.
 
@@ -415,6 +419,8 @@ In the future, we may decide to have jobs read and write to a job-local file sys
 
 \section{Development Process}
 
+\setcounter{footnote}{0}  % Latex only allows 9 footnotes with symbols.
+
 All the code described in this paper is written in Python (requiring at least Python version 3.8\cite{2020ASPC..522..541J}) and is open-source using the BSD 3-clause license for some packages and GPLv3 license for others.
 The code is available from GitHub at \url{https://github.com/lsst} and we follow the Rubin Observatory Data Management development process.\footnote{\url{developer.lsst.io}}\cite{2018SPIE10707E..09J}
 We use the \texttt{black} \footnote{\url{https://black.readthedocs.io/}} tool to automatically format the code, along with \texttt{isort} \footnote{\url{https://pycqa.github.io/isort/}} to order the Python imports.
@@ -429,7 +435,7 @@ We have, though, found that annotations do help once they have been added, and i
 Documentation is built using Sphinx, based on the \texttt{documenteer} tooling\footnote{\url{https://documenteer.lsst.io}} and is integrated into the LSST Science Pipelines documentation.\footnote{\url{https://pipelines.lsst.io}}
 
 We use GitHub Actions in all the repositories to ensure that code is formatted correctly, the type annotations are correct, and that all the tests pass and documentation builds.
-At the time of writing, these packages are not yet available on the Python Package Index but we will be making them available that way.
+We also automatically publish all the packages to the Python Package Index\footnote{For example the Butler can be found at \url{https://pypi.org/project/lsst-daf-butler/}.} when a tag is added to a repository.
 These packages do not require the entire LSST Science Pipelines software system to be installed.
 
 \section{Conclusions}
@@ -441,6 +447,7 @@ This system has been successfully demonstrated at scale with the reprocessing of
 
 \acknowledgments
 
+We thank Eli Rykoff for his review of the manuscript.
 This material or work is supported in part by the National Science Foundation through Cooperative Agreement AST-1258333, Cooperative Support Agreement AST-1202910, and Cooperative Support Agreement AST-1836783 managed by the Association of Universities for Research in Astronomy (AURA), and the Department of Energy under Contract No.\ DE-AC02-76SF00515 with the SLAC National Accelerator Laboratory managed by Stanford University.
 Additional Rubin Observatory funding comes from private donations, grants to universities, and in-kind support from LSSTC Institutional Members.
 
