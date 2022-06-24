@@ -232,7 +232,11 @@ INTEGERS { nameptr namesleft numnames }
 FUNCTION {format.url}
 {
   url empty$
-    { "" }
+    { handle empty$
+      'skip$
+      { "\url{https://ls.st/" handle * "}" * output }
+    if$
+    }
     { "\url{" url * "}" * output }
   if$
 }
