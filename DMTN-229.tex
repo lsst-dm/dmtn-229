@@ -129,7 +129,7 @@ All these collections are important when building and executing pipelines.
 \subsection{The Registry}
 
 Registry can be thought of as a database that can be queried to find out what datasets are available.
-We define Registry to have an abstract interface to allow different implementations to co-exist, although we do assume that a SQL-like syntax is supported when constraining queries (effectively a \texttt{WHERE} clause), even if that does not result in SQL being executed in the specific registry implementation.
+We define Registry to have an abstract interface to allow different implementations to co-exist, although we do assume that a SQL-like syntax is supported when constraining queries (effectively a \texttt{WHERE} clause), even if that does not result in SQL being executed in the specific Registry implementation.
 
 The primary Registry implementation uses SQLAlchemy \cite{myers2015essential}\footnote{\url{https://www.sqlalchemy.org}} to talk to PostgreSQL\footnote{\url{https://www.postgresql.org}} or SQLite\footnote{\url{https://www.sqlite.org/index.html}} backend databases.
 We do not make use of the Object Relational Mapping interface, and instead use the low-level SQLAlchemy ``Core'' interface to create and interact with tables.
@@ -141,72 +141,72 @@ The tables that hold this dimension metadata exist independently of the datasets
 The dimension tables -- which often also include foreign key relationships, such as the \texttt{physical\_filter} associated with an \texttt{exposure} -- thus form a data model ``skeleton'' of sorts for the actual datasets, which have no relationships of their own.
 In some cases those dimension relationships are spatial (some dimensions are associated with regions on the sky) or temporal (associated with time spans).
 
-These dimension relationships allow the \texttt{Registry} to provide a rich query system, based on a custom expression language based on SQL boolean expressions.
-These are parsed and translated by \texttt{Registry} into actual SQL queries, and we delegate optimization and execution of these queries almost entirely to the underlying database.
-But in contrast to raw SQL the user essentially has to only provide the \texttt{Registry} the equivalent of the \texttt{WHERE} clause, because the \texttt{SELECT} clause is based on what dataset types or dimensions are being requested, and the multi-join \texttt{FROM} clause can be worked out internally according to the known dimension relationships, despite those relationships being encoded in YAML configuration rather than code.
+These dimension relationships allow the Registry to provide a rich query system, based on a custom expression language based on SQL boolean expressions.
+These are parsed and translated by Registry into actual SQL queries, and we delegate optimization and execution of these queries almost entirely to the underlying database.
+But in contrast to raw SQL the user essentially has to only provide the Registry the equivalent of the \texttt{WHERE} clause, because the \texttt{SELECT} clause is based on what dataset types or dimensions are being requested, and the multi-join \texttt{FROM} clause can be worked out internally according to the known dimension relationships, despite those relationships being encoded in YAML configuration rather than code.
 The query system also isolates the actual database schema from the user, allowing it to be changed for performance reasons without breaking user code.
 
 \subsection{The Datastore}
 
 Datastores are responsible for serializing a Python object to a storage system and reading the data back from the storage system and returning a Python object.
-On \texttt{put}, datastore is given a reference to the dataset (encapsulated in the Python class \texttt{DatasetRef}) by Registry (this is the data coordinate, the dataset type, the run collection, and the unique identifier, a UUID,\cite{rfc4122uuid} assigned by Registry) and the Python object.
-To retrieve a dataset the datastore is passed in the dataset reference.
-By design the only connection between Registry and Datastore is the dataset reference, although in some implementations the datastore can make use of the shared PostgreSQL database to store relevant information.
+On \texttt{put}, Datastore is given a reference to the dataset (encapsulated in the Python class \texttt{DatasetRef}) by Registry (this is the data coordinate, the dataset type, the run collection, and the unique identifier, a UUID,\cite{rfc4122uuid} assigned by Registry) and the Python object.
+To retrieve a dataset the Datastore is passed in the dataset reference.
+By design the only connection between Registry and Datastore is the dataset reference, although in some implementations the Datastore can make use of the shared PostgreSQL database to store relevant information.
 
 The Butler user does not have to know how data are serialized or where it is coming from, indeed there is no requirement for files to be involved at all.
-In the current system there are three datastores defined: \texttt{FileDatastore} serializes to files; \texttt{InMemoryDatastore} stores Python objects in an in-memory cache; and \texttt{ChainedDatastore} is a datastore consisting of other datastores.
-All datastores support configuration-based constraints that can be used to decide whether a specific dataset type or storage class should be accepted or rejected by the datastore.
+In the current system there are three Datastores defined: \texttt{FileDatastore} serializes to files; \texttt{InMemoryDatastore} stores Python objects in an in-memory cache; and \texttt{ChainedDatastore} is a Datastore consisting of other Datastores.
+All Datastores support configuration-based constraints that can be used to decide whether a specific dataset type or storage class should be accepted or rejected by the Datastore.
 
 \subsubsection{File Datastore}
 
-The \texttt{FileDatastore} is the most fundamental of the datastore implementations in that it is responsible for serializing datasets to files and reading them back in again.
-A file datastore is defined by a URI pointing to the area where files are under the control of the datastore.
+The \texttt{FileDatastore} is the most fundamental of the Datastore implementations in that it is responsible for serializing datasets to files and reading them back in again.
+A file Datastore is defined by a URI pointing to the area where files are under the control of the Datastore.
 A URI is used rather than a file path to allow file I/O itself to be abstracted to allow use of remote storage or POSIX file systems.
 To achieve this abstraction we use a unified URI handler class, \texttt{ResourcePath} from the \texttt{lsst-resources} package\footnote{\url{https://github.com/lsst/resources}}, which currently supports S3 storage, Google Cloud Storage, WebDAV, and POSIX, as well as new storage systems which can easily be added.
 
-Within the file datastore the class that is responsible for creating the file and reading the file is called the \texttt{Formatter}.
-The datastore configuration system includes a look up table that matches the dataset type or storage class of the relevant dataset to a corresponding formatter implementation.
+Within the file Datastore the class that is responsible for creating the file and reading the file is called the \texttt{Formatter}.
+The Datastore configuration system includes a look up table that matches the dataset type or storage class of the relevant dataset to a corresponding formatter implementation.
 This formatter is then given the Python object and the destination location and told to write the file.
-Similarly, when a dataset is requested, the formatter is looked up in the internal datastore database and the formatter is told to read the file.
+Similarly, when a dataset is requested, the formatter is looked up in the internal Datastore database and the formatter is told to read the file.
 We do not look up the formatter from configuration when reading since it is possible that the configuration may have changed since the file was stored.
 
-Whereas the registry only deals with datasets, the datastore understands composites.
-When a dataset is associated with a composite storage class, the datastore can be configured to disassemble the dataset and write the contents as distinct files.
+Whereas the Registry only deals with datasets, the Datastore understands composites.
+When a dataset is associated with a composite storage class, the Datastore can be configured to disassemble the dataset and write the contents as distinct files.
 For example, an astronomical image could be disassembled into the pixel image data, a variance plane, a mask, and a header before being written out as four files.
 If a user requests just the header component, that file can be read without needing to look at the other files, and if the full dataset is requested all components will be read and the composite will be reassembled using the helper class declared in the storage class definition.
 Of course, if a user requests a component when the dataset was not disassembled, this will still work, although it may require the entire file be downloaded from a remote object store in order to extract a small subset.
 
 When the datasets are stored on a slow network disk or a remote object store, it is inefficient to continually re-read the files if the pipeline algorithm is reading subsets or if the user is requesting individual components.
-The file datastore overcomes this by implementing a caching system where the file is stored in a more local cache directory on first retrieval.
+The file Datastore overcomes this by implementing a caching system where the file is stored in a more local cache directory on first retrieval.
 The cache can expire files based on number of files, total cache size, or number of datasets (noting that a disassembled composite will consist of multiple files).
-In some situations this can significantly improve performance with remote datastores.
+In some situations this can significantly improve performance with remote Datastores.
 
 \subsubsection{In-Memory Datastore}
 
-This is an in-memory caching datastore.
+This is an in-memory caching Datastore.
 Since it caches Python objects in a single process its main purpose is to support intermediate products that are to be passed from one task to another without needing to include the overhead for serialization.
-In most scenarios an in-memory datastore is combined with another datastore in a chain.
-Care must be taken when returning datasets from the in-memory datastore since Python can not prevent the caller from modifying the object, which would cause confusion if the object is retrieved a second time.
-Options being considered are to always deep copy the object on return, or consider allowing the datastore to be configured to remove the object from the cache when retrieved.
+In most scenarios an in-memory Datastore is combined with another Datastore in a chain.
+Care must be taken when returning datasets from the in-memory Datastore since Python can not prevent the caller from modifying the object, which would cause confusion if the object is retrieved a second time.
+Options being considered are to always deep copy the object on return, or consider allowing the Datastore to be configured to remove the object from the cache when retrieved.
 
 \subsubsection{Chained Datastore}
 
-The chained datastore implementation does not itself store any datasets.
-It consists of multiple datastores, each with its own configuration and allowed to be of any type.
-When writing a dataset the dataset is presented to each datastore in turn and everything is okay so long as one datastore accepts the dataset.
-When reading a dataset each datastore is asked for the dataset in turn and the Python object is returned from the first matching datastore.
-Combined with per-datastore dataset type constraints, this can allow some datasets to be stored in an in-memory datastore and file datastore but allow the in-memory dataset to be retrieved efficiently, whilst other datasets are only stored in the file datastore.
-Alternatively a chain of two file datastores can be used to allow one datastore to be read-only (for example a datastore containing a validated self-contained data release) and a second datastore to accept derived products from users.
+The chained Datastore implementation does not itself store any datasets.
+It consists of multiple Datastores, each with its own configuration and allowed to be of any type.
+When writing a dataset the dataset is presented to each Datastore in turn and everything is okay so long as one Datastore accepts the dataset.
+When reading a dataset each Datastore is asked for the dataset in turn and the Python object is returned from the first matching Datastore.
+Combined with per-Datastore dataset type constraints, this can allow some datasets to be stored in an in-memory Datastore and file Datastore but allow the in-memory dataset to be retrieved efficiently, whilst other datasets are only stored in the file Datastore.
+Alternatively a chain of two file Datastores can be used to allow one Datastore to be read-only (for example a Datastore containing a validated self-contained data release) and a second Datastore to accept derived products from users.
 
 \subsubsection{Other Datastores}
 
-The datastore interface does not require datasets to be persisted as files.
+The Datastore interface does not require datasets to be persisted as files.
 For example, we are considering storing pipeline metrics directly into our metrics database \cite{SQR-019,DMTN-203}.
-The Butler user would not know whether a metric was being stored as a JSON file in a file datastore or stored directly into a metrics database (or even stored in both places).
+The Butler user would not know whether a metric was being stored as a JSON file in a file Datastore or stored directly into a metrics database (or even stored in both places).
 
 \subsection{Client/Server Butler}
 
-The Butler is a Python library that, by default, is set up to use SQLAlchemy to talk to a SQL registry, and will use AWS or Google Cloud credentials to talk to object stores.
+The Butler is a Python library that, by default, is set up to use SQLAlchemy to talk to a SQL Registry, and will use AWS or Google Cloud credentials to talk to object stores.
 This is not a convenient interface if Python is not being used, or if the authorization required to access the database or object store directly is not available to the people trying to access the Butler.
 The latter situation is likely to be the situation in the Rubin Science Platform in the cloud where users will be logged in with Rubin accounts but will not be issued cloud credentials.\cite{DMTN-182,2021arXiv211115030O}.
 
@@ -304,7 +304,7 @@ For example, for LSSTCam the QE curves are calculated by the camera team and giv
 Additionally, some calibrations, such as defect masks, are relatively static, and these can be represented in a compact text format, and are useful to people outside of a Butler.
 We call such datasets ``curated calibrations'' and store them in Git repositories using text file formats and a directory layout that makes the validity ranges clear.
 It can be very convenient when setting up a new Butler for an instrument to be able to seed it with these curated calibrations without having to locate raw data files and reconstruct them from scratch, and infrastructure is provided to enable that, for example using the \texttt{butler write-curated-calibrations} command line tool.
-Generally, when these curated calibrations are stored the Butler converts them from text format to a binary format to make reading them more efficient; this is all handled by the formatter configured for the particular datastore.
+Generally, when these curated calibrations are stored the Butler converts them from text format to a binary format to make reading them more efficient; this is all handled by the formatter configured for the particular Datastore.
 
 \section{The Pipeline System}
 
@@ -367,8 +367,8 @@ What it does not show is any specific datasets attached to each step.
 To determine what is to be processed a graph building algorithm queries a Butler and allocates datasets to tasks.
 All of the datasets which correspond to a unique set of task dimensions are bundled together into a unit of work that we call a ``quantum''.
 The set of all quanta to be executed and the relations between them and their tasks are called a ``Quantum Graph.''
-The user provides an input Butler collection to search for datasets, in addition to a \texttt{Registry} query expression that affects not just the input datasets but the dimensions of the tasks and output datasets as well.
-Having the \texttt{Registry}'s dimension table skeleton populated before the Quantum Graph is generated allows us to query the database for both input datasets and predict future output datasets in much the same way.
+The user provides an input Butler collection to search for datasets, in addition to a Registry query expression that affects not just the input datasets but the dimensions of the tasks and output datasets as well.
+Having the Registry's dimension table skeleton populated before the Quantum Graph is generated allows us to query the database for both input datasets and predict future output datasets in much the same way.
 The graph builder then allocates each matching input dataset to a specific Quantum and determines all the expected datasets that will be created during pipeline processing.
 During processing the outputs are written to a \texttt{RUN} collection along with additional datasets containing all the log messages written by a task, software package versions, and processing metadata (including execution times and CPU usage for \texttt{Task}s).
 In normal usage we then create a new \texttt{CHAINED} collection that combines the input collections and the new output \texttt{RUN} collection to allow a single collection to be queried for all the input and output datasets in that processing.
@@ -400,22 +400,22 @@ Some quanta can be quick, executing in tens of seconds, and not all batch system
 Clustering allows for multiple quanta to be combined into a single execution job; this can be particularly efficient if the clustering is designed such that the output of the first quantum is the only input to the next quantum (which is a common scenario for the early stages of many pipelines when a single detector is being characterized).
 
 In the initial experiments, each quantum would talk to the main Butler repository when retrieving data at the start of the quantum and then when writing the results out at the end.
-It soon became clear that this approach was not tenable once thousands of jobs are running concurrently and they are all trying to ask the registry where their specific datasets are located.
+It soon became clear that this approach was not tenable once thousands of jobs are running concurrently and they are all trying to ask the Registry where their specific datasets are located.
 We fixed this problem by changing the way that batch jobs interact with a Butler.
-Initially we created a standalone read-only SQLite Butler registry containing the relevant information for the entire workflow.
+Initially we created a standalone read-only SQLite Butler Registry containing the relevant information for the entire workflow.
 That did fix the problem with the large numbers of simultaneous connections and updates.
 However, as a SQLite file it had to be copied to each job.
 For very large workflows the SQLite file became large enough that the copying caused its own problems on some systems and at minimum caused time delays.
 A better solution was to use the Quantum Graph itself since the graph can be stored in a shared location and only the appropriate subset of the graph needs to be read by each job.
 The Quantum Graph knows all the input datasets and all the expected output datasets; it is therefore possible for a Butler to be constructed that uses the Quantum Graph itself as the Registry whilst using the main Datastore.
-To enable this it was necessary to transfer datastore records for existing datasets into the Quantum Graph.
+To enable this it was necessary to transfer Datastore records for existing datasets into the Quantum Graph.
 Running large workflows in this manner means that the main Registry is not involved at all during the bulk of the processing.
-Once the main workflow completes, a final job is executed that checks the datastore to see which of the expected files were produced, and then ensures that the associated registry entries are transferred back to the main Registry.
-This merge job runs even if the workflow fails, to ensure that all the datasets that were generated are known to the main registry.
+Once the main workflow completes, a final job is executed that checks the Datastore to see which of the expected files were produced, and then ensures that the associated Registry entries are transferred back to the main Registry.
+This merge job runs even if the workflow fails, to ensure that all the datasets that were generated are known to the main Registry.
 These changes significantly improved the scalability of the bulk processing.
-Note though that in this mode we are still writing to the main datastore file system or object store and not using any file management facilities of the workflow system.
+Note though that in this mode we are still writing to the main Datastore file system or object store and not using any file management facilities of the workflow system.
 This decision is not hard-coded into BPS though and is entirely controlled by configuration.
-In the future, we may decide to have jobs read and write to a job-local file system datastore (whilst matching all the formatter and file naming configuration) and have the workflow system move files between the main datastore and the job's datastore.
+In the future, we may decide to have jobs read and write to a job-local file system Datastore (whilst matching all the formatter and file naming configuration) and have the workflow system move files between the main Datastore and the job's Datastore.
 
 \section{Development Process}
 
